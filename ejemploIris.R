@@ -93,7 +93,7 @@ plot(puntuaciones$PC1,
      pch=21, 
      bg=c("red","green3","blue")[clustersFinales$cluster], 
      main="Edgar Anderson's Iris Data")
-    
+
 ##  Obtener el k programáticamente:
 # install.packages("inflection")
 require(inflection)
@@ -126,3 +126,33 @@ getElbowPoint <- function(x_values, y_values) {
 } # Fuente: http://www.semspirit.com/artificial-intelligence/machine-learning/clustering/k-means-clustering/k-means-clustering-in-r/
 getElbowPoint(1:length(wss),wss) # También acierta con 3!
 
+# Usamos la misma técnica para detectar el número óptimo de componentes:
+# 
+
+varianza_componentes <- cumsum(componentes$sdev/sum(componentes$sdev))
+plot(1:length(varianza_componentes),-varianza_componentes)
+n_comp_optimo <- getElbowPoint(1:length(varianza_componentes),-varianza_componentes)  # 2 !
+
+# Transformamos las componentes elegidas en una sentencia SQL válida!!
+# Esto nos permitiría implementar la puntuación de las componentes principales en cualquier sistema SQL
+componentes_elegidas <- componentes$rotation[,1:n_comp_optimo]
+
+library(glue)
+obtener_sentencia <- function(x){
+  sentencia <- glue("{names(x)}*{x}")
+  sentencia <- as.character(sentencia)
+  sentencia <- paste0(sentencia,collapse="+")
+  
+}
+sentencias <- apply(componentes_elegidas,2,obtener_sentencia)
+sentencias <- glue("({sentencias}) as {names(sentencias)}")
+
+query <- glue(
+"select
+{paste0(sentencias, collapse=',\n')}
+from tabla_fuente"
+)
+cat(query)
+
+# Transformamos la asignacióna los centroides a sentencias SQL válidas!
+# Esto nos permitiría implementar la asignación de los cluster en cualquier sistema SQL
