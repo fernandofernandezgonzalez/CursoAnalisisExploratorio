@@ -72,7 +72,7 @@ plot(wss)
 centroides<-kmeans(data,3,nstart=100)$centers
 
 # Calculo los clusters definitivos
-clustersFinales<-kmeans(data,centroides$centers)
+clustersFinales<-kmeans(data,centroides)
 
 # Grafico los clusters
 plot(puntuaciones$PC1, 
@@ -132,7 +132,7 @@ getElbowPoint(1:length(wss),wss) # También acierta con 3!
 varianza_componentes <- cumsum(componentes$sdev/sum(componentes$sdev))
 plot(1:length(varianza_componentes),-varianza_componentes)
 n_comp_optimo <- getElbowPoint(1:length(varianza_componentes),-varianza_componentes)  # 2 !
-
+n_comp_optimo
 # Transformamos las componentes elegidas en una sentencia SQL válida!!
 # Esto nos permitiría implementar la puntuación de las componentes principales en cualquier sistema SQL
 componentes_elegidas <- componentes$rotation[,1:n_comp_optimo]
@@ -158,3 +158,20 @@ cat(query) # Cambiar los nombres de las tablas como se prefiera
 
 # Transformamos la asignacióna los centroides a sentencias SQL válidas!
 # Esto nos permitiría implementar la asignación de los cluster en cualquier sistema SQL
+centroides_finales <- as.data.frame(clustersFinales$centers) 
+colnames(centroides_finales)<-c("sepal_length","sepal_width","petal_length","petal_width") # Este paso es porque las variables tienen puntos, normalmente no seria necesario
+
+fake_table_centroides <- apply(centroides_finales,2,function(x)paste(x," as "))
+
+centroids_variables <- colnames(fake_table_centroides)
+
+
+fake_table_centroides <- as.data.frame(sapply(centroids_variables,function(x)paste(fake_table_centroides[,x],x)))
+fake_table_centroides <- apply(fake_table_centroides,1,function(x)paste(x,collapse=", "))
+fake_table_centroides <- paste ( glue("select {1:length(fake_table_centroides)} as cluster, {fake_table_centroides} \n") ,collapse= " union distinct ")
+fake_table_centroides
+
+# Ahora tenemos que hacer el cross join con esta tabla y poner la formula de la distancia cuadratica (con un group by)
+
+
+
