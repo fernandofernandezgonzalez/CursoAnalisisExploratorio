@@ -147,14 +147,14 @@ obtener_sentencia <- function(x){
 sentencias <- apply(componentes_elegidas,2,obtener_sentencia)
 sentencias <- glue("({sentencias}) as {names(sentencias)}")
 
-query <- glue(
+query_componentes <- glue(
 "
 create table componentes as
 select
 {paste0(sentencias, collapse=',\n')}
 from tabla_fuente"
 )
-cat(query) # Cambiar los nombres de las tablas como se prefiera
+cat(query_componentes) # Cambiar los nombres de las tablas como se prefiera
 
 # Transformamos la asignacióna los centroides a sentencias SQL válidas!
 # Esto nos permitiría implementar la asignación de los cluster en cualquier sistema SQL
@@ -173,5 +173,22 @@ fake_table_centroides
 
 # Ahora tenemos que hacer el cross join con esta tabla y poner la formula de la distancia cuadratica (con un group by)
 
+formula <- paste("(a.",centroids_variables,"-b.",centroids_variables,")^2",collapse="+",sep="") # Para ordenar no necesito las raices
+
+distancias <- glue("
+select id, cluster, {formula} as distancia
+from 
+(                   
+select a.*, b.*
+from {query_componentes} a cross join {fake_table_centroides} b
+                 ) 
+group by id, cluster")
+
+# Finalmente elegimos la distancia menor con una top query
+asignacion_cluster <- glue("
+select id, cluster, rank() over (partition by id order by distancia) as rank_distancia
+from ({distancias})
+where rank_distancia = 1
+")
 
 
