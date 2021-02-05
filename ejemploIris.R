@@ -148,11 +148,13 @@ sentencias <- apply(componentes_elegidas,2,obtener_sentencia)
 sentencias <- glue("({sentencias}) as {names(sentencias)}")
 
 query <- glue(
-"select
+"
+create table componentes as
+select
 {paste0(sentencias, collapse=',\n')}
 from tabla_fuente"
 )
-cat(query)
+cat(query) # Cambiar los nombres de las tablas como se prefiera
 
 # Transformamos la asignacióna los centroides a sentencias SQL válidas!
 # Esto nos permitiría implementar la asignación de los cluster en cualquier sistema SQL
