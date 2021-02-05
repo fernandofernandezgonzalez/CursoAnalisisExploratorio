@@ -191,4 +191,5 @@ from ({distancias})
 where rank_distancia = 1
 ")
 
+# Ojo! La sintaxis generada esta pensada para Bigquery, es posible que otras plataformas necesiten ligeras variaciones
 
