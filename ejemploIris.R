@@ -22,6 +22,8 @@ plot(iris$Petal.Width,
 
 # Seleccionamos solo las columnas numéricas
 data<-iris[,1:4]
+colnames(data)<-c("sepal_length","sepal_width","petal_length","petal_width") # Este paso es porque las variables tienen puntos, normalmente no seria necesario
+
 
 # Sustituimos valores perdidos por 0
 
@@ -61,7 +63,7 @@ calculaWss<-function(k,data){
   
 }
 
-wss<-sapply(Ks,calculaWss,data)
+wss<-sapply(Ks,calculaWss,puntuaciones)
 
 plot(wss)
 
@@ -69,10 +71,10 @@ plot(wss)
 
 
 # Calculo centroides iniciales
-centroides<-kmeans(data,3,nstart=100)$centers
+centroides<-kmeans(puntuaciones,3,nstart=100)$centers
 
 # Calculo los clusters definitivos
-clustersFinales<-kmeans(data,centroides)
+clustersFinales<-kmeans(puntuaciones,centroides)
 
 # Grafico los clusters
 plot(puntuaciones$PC1, 
@@ -136,21 +138,31 @@ n_comp_optimo
 # Transformamos las componentes elegidas en una sentencia SQL válida!!
 # Esto nos permitiría implementar la puntuación de las componentes principales en cualquier sistema SQL
 componentes_elegidas <- componentes$rotation[,1:n_comp_optimo]
+centro <- componentes$center
 
 library(glue)
-obtener_sentencia <- function(x){
-  sentencia <- glue("{names(x)}*{x}")
+obtener_sentencia <- function(x,centro=NULL){
+  if(!is.null(centro)){
+    nombres_x <- names(x)
+    print(nombres_x)
+    print(centro)
+    nombres_x <- glue("{nombres_x}-{centro[nombres_x]}")
+  } else{
+    nombres_x <- names(x)
+  }
+  sentencia <- glue("({nombres_x})*{x}")
   sentencia <- as.character(sentencia)
   sentencia <- paste0(sentencia,collapse="+")
-  
+  #TODO  :aniadir scale if scale is TRUE
 }
-sentencias <- apply(componentes_elegidas,2,obtener_sentencia)
+
+sentencias <- apply(componentes_elegidas,2,obtener_sentencia,centro=centro)
 sentencias <- glue("({sentencias}) as {names(sentencias)}")
 
 query_componentes <- glue(
 "
-create table componentes as
-select
+-- create table componentes as
+select id, 
 {paste0(sentencias, collapse=',\n')}
 from tabla_fuente"
 )
@@ -159,35 +171,34 @@ cat(query_componentes) # Cambiar los nombres de las tablas como se prefiera
 # Transformamos la asignacióna los centroides a sentencias SQL válidas!
 # Esto nos permitiría implementar la asignación de los cluster en cualquier sistema SQL
 centroides_finales <- as.data.frame(clustersFinales$centers) 
-colnames(centroides_finales)<-c("sepal_length","sepal_width","petal_length","petal_width") # Este paso es porque las variables tienen puntos, normalmente no seria necesario
 
 fake_table_centroides <- apply(centroides_finales,2,function(x)paste(x," as "))
 
-centroids_variables <- colnames(fake_table_centroides)
+centroides_variables <- colnames(fake_table_centroides)
 
 
-fake_table_centroides <- as.data.frame(sapply(centroids_variables,function(x)paste(fake_table_centroides[,x],x)))
+fake_table_centroides <- as.data.frame(sapply(centroides_variables,function(x)paste(fake_table_centroides[,x],x)))
 fake_table_centroides <- apply(fake_table_centroides,1,function(x)paste(x,collapse=", "))
-fake_table_centroides <- paste ( glue("select {1:length(fake_table_centroides)} as cluster, {fake_table_centroides} \n") ,collapse= " union distinct ")
+fake_table_centroides <- paste ( glue("select {1:length(fake_table_centroides)} as cluster, {fake_table_centroides} \n") ,collapse= " \n union distinct ")
 fake_table_centroides
 
 # Ahora tenemos que hacer el cross join con esta tabla y poner la formula de la distancia cuadratica (con un group by)
 
-formula <- paste("(a.",centroids_variables,"-b.",centroids_variables,")^2",collapse="+",sep="") # Para ordenar no necesito las raices
+formula <- paste("POW(a.",centroides_variables,"-b.",centroides_variables,",2)",collapse="+",sep="") 
 
 distancias <- glue("
-select id, cluster, {formula} as distancia
+select id, cluster, sqrt({formula}) as distancia
 from 
-(                   
-select a.*, b.*
-from {query_componentes} a cross join {fake_table_centroides} b
-                 ) 
-group by id, cluster")
+({query_componentes}) a 
+cross join ({fake_table_centroides}) b
+                 ")
 
 # Finalmente elegimos la distancia menor con una top query
 asignacion_cluster <- glue("
-select id, cluster, rank() over (partition by id order by distancia) as rank_distancia
+select * from 
+(select id, cluster, rank() over (partition by id order by distancia) as rank_distancia
 from ({distancias})
+)
 where rank_distancia = 1
 ")
 
